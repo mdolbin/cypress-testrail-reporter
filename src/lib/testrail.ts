@@ -5,8 +5,9 @@ const path = require('path');
 const FormData = require('form-data');
 const TestRailLogger = require('./testrail.logger');
 const TestRailCache = require('./testrail.cache');
-import { TestRailOptions, TestRailResult } from './testrail.interface';
+import {TestRailOptions, TestRailResult} from './testrail.interface';
 
+const apiVersionPath = '/api/v2'
 export class TestRail {
   private base: String;
   private runId: Number;
@@ -15,7 +16,7 @@ export class TestRail {
   private retries: number;
 
   constructor(private options: TestRailOptions) {
-    this.base = `${options.host}/index.php?/api/v2`;
+    this.base = `${options.host}/index.php?`;
     this.runId;
   }
 
@@ -35,7 +36,7 @@ export class TestRail {
   }
 
   public getCases (suiteId: number) {
-    let url = `${this.base}/get_cases/${this.options.projectId}&suite_id=${suiteId}`
+    let url = `${this.base}${apiVersionPath}/get_cases/${this.options.projectId}&suite_id=${suiteId}`
     if (this.options.groupId) {
       url += `&section_id=${this.options.groupId}`
     }
@@ -45,21 +46,32 @@ export class TestRail {
     if (this.options.typeId) {
       url += `&type_id=${this.options.typeId}`
     }
-    return this.makeSync(
-      axios({
-        method:'get',
-        url: url,
-        headers: { 'Content-Type': 'application/json' }, 
-        auth: {
+    let cases = []
+    let previousUrl = null
+    while (url != previousUrl) {
+      previousUrl = url;
+      this.makeSync(
+        axios({
+          method: 'get',
+          url: url,
+          headers: {'Content-Type': 'application/json'},
+          auth: {
             username: this.options.username,
             password: this.options.password
-        } 
-      })
-      .then(response => {
-        return response.data.cases.map(item =>item.id)
-      })
-      .catch(error => console.error(error))
-    )
+          }
+        })
+          .then(response => {
+            cases = cases.concat(response.data.cases.map(item => item.id))
+            if (response.data._links.next) {
+              url = `${this.base}${apiVersionPath}${response.data._links.next}`
+            }
+          })
+          .catch(error => {
+            console.error(error)
+          })
+      )
+    }
+    return cases
   }
 
   public createRun (name: string, description: string, suiteId: number) {
@@ -70,7 +82,7 @@ export class TestRail {
     this.makeSync(
       axios({
         method: 'post',
-        url: `${this.base}/add_run/${this.options.projectId}`,
+        url: `${this.base}${apiVersionPath}/add_run/${this.options.projectId}`,
         headers: { 'Content-Type': 'application/json' },
         auth: {
           username: this.options.username,
@@ -98,7 +110,7 @@ export class TestRail {
     this.makeSync(
       axios({
         method: 'post',
-        url: `${this.base}/delete_run/${this.runId}`,
+        url: `${this.base}${apiVersionPath}/delete_run/${this.runId}`,
         headers: { 'Content-Type': 'application/json' },
         auth: {
           username: this.options.username,
@@ -113,7 +125,7 @@ export class TestRail {
     return this.makeSync(
       axios({
         method: 'post',
-        url: `${this.base}/add_results_for_cases/${this.runId}`,
+        url: `${this.base}${apiVersionPath}/add_results_for_cases/${this.runId}`,
         headers: { 'Content-Type': 'application/json' },
         auth: {
           username: this.options.username,
@@ -135,7 +147,7 @@ export class TestRail {
     this.makeSync(
       axios({
         method: 'post',
-        url: `${this.base}/add_attachment_to_result/${resultId}`,
+        url: `${this.base}${apiVersionPath}/add_attachment_to_result/${resultId}`,
         headers: { ...form.getHeaders() },
         auth: {
           username: this.options.username,
@@ -172,7 +184,7 @@ export class TestRail {
     this.makeSync(
       axios({
         method: 'post',
-        url: `${this.base}/close_run/${this.runId}`,
+        url: `${this.base}${apiVersionPath}/close_run/${this.runId}`,
         headers: { 'Content-Type': 'application/json' },
         auth: {
           username: this.options.username,
